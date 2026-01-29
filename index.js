@@ -149,7 +149,7 @@ app.post('/create-va', async (req, res) => {
         const body = req.body;
         const partner_reff = generatePartnerReff();
         const expired = getExpiredTimestamp();
-        const url_callback = "https://topuplinku.siappgo.id/callback";
+        const url_callback = "https://topup.tangerangfast.online/callback";
 
         console.log("🆔 Generated partner_reff:", partner_reff, "| expired:", expired);
 
@@ -234,7 +234,7 @@ app.post('/create-qris', async (req, res) => {
 
         const partner_reff = generatePartnerReff();
         const expired = getExpiredTimestamp();
-        const url_callback = "https://topuplinku.siappgo.id/callback";
+        const url_callback = "https://topup.tangerangfast.online/callback";
 
         console.log("🧾 Generated partner_reff:", partner_reff);
         console.log("⏳ Expired timestamp:", expired);
@@ -348,7 +348,7 @@ app.post('/create-retail', async (req, res) => {
         // Biasanya transaksi retail memiliki masa expired yang lebih pendek, 
         // pastikan getExpiredTimestamp() mengembalikan format YYYYMMDDHHmmss
         const expired = getExpiredTimestamp();
-        const url_callback = "https://topuplinku.siappgo.id/callback";
+        const url_callback = "https://topup.tangerangfast.online/callback";
 
         console.log("🧾 Generated partner_reff:", partner_reff);
         console.log("⏳ Expired timestamp:", expired);
