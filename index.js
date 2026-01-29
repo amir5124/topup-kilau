@@ -149,7 +149,7 @@ app.post('/create-va', async (req, res) => {
         const body = req.body;
         const partner_reff = generatePartnerReff();
         const expired = getExpiredTimestamp();
-        const url_callback = "https://topup.kilaugroup.co.id/callback";
+        const url_callback = "https://topuplinku.siappgo.id/callback";
 
         console.log("🆔 Generated partner_reff:", partner_reff, "| expired:", expired);
 
@@ -234,7 +234,7 @@ app.post('/create-qris', async (req, res) => {
 
         const partner_reff = generatePartnerReff();
         const expired = getExpiredTimestamp();
-        const url_callback = "https://topup.kilaugroup.co.id/callback";
+        const url_callback = "https://topuplinku.siappgo.id/callback";
 
         console.log("🧾 Generated partner_reff:", partner_reff);
         console.log("⏳ Expired timestamp:", expired);
@@ -333,6 +333,117 @@ app.post('/create-qris', async (req, res) => {
     }
 });
 
+app.post('/create-retail', async (req, res) => {
+    try {
+        const body = req.body;
+        console.log("📥 Incoming retail request body:", body);
+
+        // Ambil retail_code dari body. Contoh: "ALFAMART", "INDOMARET"
+        const retail_code = body.retail_code;
+        if (!retail_code) {
+            return res.status(400).json({ error: "Parameter 'retail_code' diperlukan." });
+        }
+
+        const partner_reff = generatePartnerReff();
+        // Biasanya transaksi retail memiliki masa expired yang lebih pendek, 
+        // pastikan getExpiredTimestamp() mengembalikan format YYYYMMDDHHmmss
+        const expired = getExpiredTimestamp();
+        const url_callback = "https://topuplinku.siappgo.id/callback";
+
+        console.log("🧾 Generated partner_reff:", partner_reff);
+        console.log("⏳ Expired timestamp:", expired);
+
+        // --- 1. GENERATE SIGNATURE RETAIL ---
+        // PENTING: Gunakan fungsi generateSignatureRetail dengan parameter yang sesuai.
+        const signature = generateSignatureRetail({
+            amount: body.amount,
+            expired,
+            retail_code, // Parameter tambahan untuk retail
+            partner_reff,
+            customer_id: body.customer_id,
+            customer_name: body.customer_name,
+            customer_email: body.customer_email,
+            clientId,
+            serverKey
+        });
+
+        console.log("🔏 Generated signature:", signature);
+
+        // --- 2. SIAPKAN PAYLOAD UNTUK LINKQU API ---
+        const payload = {
+            amount: body.amount,
+            partner_reff,
+            customer_id: body.customer_id,
+            customer_name: body.customer_name,
+            expired,
+            username,
+            pin,
+            retail_code, // Tambahkan retail_code ke payload
+            customer_phone: body.customer_phone,
+            customer_email: body.customer_email,
+            remark: body.remark || "Pembayaran Retail",
+            signature,
+            url_callback
+        };
+
+        console.log("📦 Final payload to API:", payload);
+
+        // --- 3. PANGGIL API LINKQU ---
+        const headers = {
+            'client-id': clientId,
+            'client-secret': clientSecret
+        };
+        const url = 'https://api.linkqu.id/linkqu-partner/transaction/create/retail'; // Endpoint RETAIL
+        const response = await axios.post(url, payload, { headers });
+
+        const result = response.data;
+        console.log("✅ API response from LinkQu:", result);
+
+        // --- 4. SIMPAN DATA KE DATABASE ---
+        // Sesuaikan nama tabel dan kolom jika diperlukan
+        const now = new Date();
+        const mysqlDateTime = now.toISOString().slice(0, 19).replace('T', ' ');
+
+        const insertQuery = `
+            INSERT INTO inquiry_retail 
+            (partner_reff, customer_id, customer_name, amount, expired, bank_code, customer_phone, customer_email, retail_code, response_raw, created_at, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
+        `;
+
+        await db.execute(insertQuery, [
+            partner_reff,
+            body.customer_id,
+            body.customer_name,
+            body.amount,
+            expired,
+            retail_code,
+            body.customer_phone || null,
+            body.customer_email,
+            result?.payment_code || null, // Simpan Payment Code (misal: kode bayar Indomaret/Alfamart)
+            JSON.stringify(result),
+            mysqlDateTime
+        ]);
+
+        console.log(`✅ Data Retail berhasil disimpan ke database dengan created_at = ${mysqlDateTime}`);
+        res.json(result);
+
+    } catch (err) {
+        const errMsg = err.response?.data?.message || err.message;
+        const logMsg = `❌ Gagal membuat transaksi Retail: ${errMsg}`;
+        console.error(logMsg);
+
+        if (err.response?.data) {
+            console.error("📛 Full error response from API:", err.response.data);
+        }
+
+        logToFile(logMsg);
+
+        res.status(500).json({
+            error: "Gagal membuat transaksi Retail",
+            detail: err.response?.data || err.message
+        });
+    }
+});
 
 
 app.get('/download-qr/:partner_reff', async (req, res) => {
@@ -408,8 +519,8 @@ async function addBalance(amount, customer_name, va_code, serialnumber) {
         const negativeAmount = originalAmount - admin;
 
         // Ambil nama terakhir dari customer_name
-        const username = customer_name;
-      logToFile(username, "username")
+        const username = customer_name.trim().split(" ").pop();
+        console.log(username, "username")
 
         // Format nominal ke format Indonesia
         const formattedAmount = negativeAmount.toLocaleString('id-ID');
@@ -425,7 +536,7 @@ async function addBalance(amount, customer_name, va_code, serialnumber) {
 
         const config = {
             method: 'post',
-            url: 'https://kilaugroup.co.id/api-saldo.php',
+            url: 'https://linku.co.id/qris.php',
             headers: {
                 ...formdata.getHeaders()
             },
@@ -440,7 +551,7 @@ async function addBalance(amount, customer_name, va_code, serialnumber) {
             const requestBody = {
                 type: "username",
                 value: username,
-                apikey: "z4PBduE9ocedWaaTUCKHnOl7C8yokkTB4catk7FMt5U2d4Lmyv",
+                apikey: "FF6dKZ94S3SRB4jp3zc2UulCnH5bhLaMJ7sa3dz8wm1qj8ggqu",
                 content: catatan,
             };
 
